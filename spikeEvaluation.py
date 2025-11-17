@@ -19,15 +19,15 @@ win_size = 200
 input_shape = (win_size, 1)
 win_step = 160
 
-d_train = []
+d_input = []
 for i in range(train_start, sequence_len - win_size, win_step):
-    d_train.append(d[0][i:i + win_size])
+    d_input.append(d[0][i:i + win_size])
 
-d_train = np.array(d_train).reshape(-1, win_size)
+d_input = np.array(d_input).reshape(-1, win_size)
 
 model = keras.models.load_model("models/spike_detection_v" + str(model_version) + ".keras")
 
-output = model.predict(d_train)
+output = model.predict(d_input)
 
 # print("full output")
 # print(output)
