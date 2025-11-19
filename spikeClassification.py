@@ -5,7 +5,7 @@ import tensorflow as tf
 import keras
 from keras import datasets, layers, models, backend, losses
 
-model_version = 4
+model_version = 5
 
 mat = spio.loadmat("Coursework-Datasets-20251028/D1.mat")
 d = mat["d"]
@@ -58,18 +58,19 @@ class_label = np.array(label_data[:int(num_of_spikes * 0.8)])
 
 model = models.Sequential()
 model.add(layers.Input(shape=input_shape))
+#model.add(layers.Conv1D(30, 3, padding="same", activation="sigmoid"))
+#model.add(layers.MaxPooling1D(4))
 model.add(layers.Conv1D(20, 3, padding="same", activation="relu"))
 model.add(layers.MaxPooling1D(4))
-model.add(layers.Conv1D(30, 3, padding="same", activation="relu"))
 model.add(layers.Conv1D(30, 3, padding="same", activation="relu"))
 #model.add(layers.MaxPooling1D(4))
 # model.add(layers.Conv1D(50, 10, padding="same", activation="relu"))
 # model.add(layers.MaxPooling1D(4))
 model.add(layers.Flatten())
 # model.add(layers.Dense(600, activation="relu"))
-model.add(layers.Dense(30, activation="relu"))
-model.add(layers.Dense(30, activation="relu"))
+# model.add(layers.Dense(10, activation="relu"))
 model.add(layers.Dense(20, activation="relu"))
+model.add(layers.Dense(30, activation="relu"))
 model.add(layers.Dense(5, activation="sigmoid"))
 model.summary()
 

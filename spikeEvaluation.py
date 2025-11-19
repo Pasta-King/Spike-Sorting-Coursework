@@ -4,7 +4,8 @@ import scipy.io as spio
 import tensorflow as tf
 import keras
 
-model_version = 2
+detector_version = 2
+classifier_version = 5
 
 mat = spio.loadmat("Coursework-Datasets-20251028/D1.mat")
 d = mat["d"]
@@ -25,9 +26,9 @@ for i in range(train_start, sequence_len - win_size, win_step):
 
 d_input = np.array(d_input).reshape(-1, win_size)
 
-model = keras.models.load_model("models/spike_detection_v" + str(model_version) + ".keras")
+detector_model = keras.models.load_model("models/spike_detection_v" + str(detector_version) + ".keras")
 
-output = model.predict(d_input)
+output = detector_model.predict(d_input)
 
 # print("full output")
 # print(output)
@@ -70,31 +71,71 @@ for i in range (0, len(output)):
 total_true_spikes = 0
 total_in_range_spikes = 0
 total_fake_spikes = 0
+correctly_classifier = 0
+incorrectly_classified = 0
+classified_fake_spike = 0
 
 # Going through predicted spikes and checking accuracy
 predicted_spikes = np.nonzero(relu_flat_output)[0]
+
+classifier_model = keras.models.load_model("models/spike_classification_v" + str(classifier_version) + ".keras")
+
+win_size = 100
+train_data = []
+
+for i in range(0, len(predicted_spikes)):
+    spike_index = predicted_spikes[i]
+    if (spike_index + win_size//2 < sequence_len) and (spike_index - win_size//2 >= 0):
+        train_data.append(d[0][spike_index - win_size//2 : spike_index + win_size//2 ])
+    elif ((spike_index + win_size//2 < sequence_len)):
+        train_data.append(d[0][: spike_index + win_size//2 ])
+    elif (spike_index - win_size//2 >= 0):
+        train_data.append(d[0][spike_index - win_size//2 :])
+    else:
+        train_data.append(d[0][:])
+
+class_train = np.array(train_data).reshape(-1, win_size) 
+
+classifier_output = classifier_model.predict(class_train)
+
+predicted_classes = []
+for i in classifier_output:
+    max_prob_index = np.argmax(i) + 1
+    predicted_classes.append(max_prob_index)
 
 for i in range(0, len(Index[0])):
     spike_index = Index[0][i]
     
     plt.plot(spike_index, d[0][spike_index], "kx")
 
-for i in predicted_spikes:
+for i in range(0, len(predicted_spikes)):
     true_spike = 0
     in_range_spike = 0
+    true_class = 8000
 
-    for x in Index[0]:
-        if i == x:
-            plt.vlines(i, 0, 4, colors="g")
+    for x in range(0, len(Index[0])):
+        if predicted_spikes[i] == Index[0][x]:
+            plt.vlines(predicted_spikes[i], 0, 4, colors="g")
             total_true_spikes += 1
             true_spike = 1
+            true_class = Class[0][x]
     
     if true_spike == 0:
-        for x in Index[0]:
-            if (i < x + 50) and (i > x - 50) and (i != x) and (true_spike == 0):
-                plt.vlines(i, 0, 4, colors="m")
+        for x in range(0, len(Index[0])):
+            if (predicted_spikes[i] < Index[0][x] + 50) and (predicted_spikes[i] > Index[0][x] - 50) and (predicted_spikes[i] != Index[0][x]):
+                plt.vlines(predicted_spikes[i], 0, 4, colors="m")
                 total_in_range_spikes += 1
                 in_range_spike = 1
+                true_class = Class[0][x]
+
+    if true_class != 8000:
+        if true_class == predicted_classes[i]:
+            correctly_classifier += 1
+        else:
+            incorrectly_classified += 1
+    else:
+        classified_fake_spike += 1
+
     
     if (true_spike == 0) and (in_range_spike == 0):
         plt.vlines(i, 0, 4, colors="r")
@@ -138,6 +179,10 @@ print("spikes in range: ", total_in_range_spikes)
 print("missing spikes: ", len(Index[0]) - (total_true_spikes + total_in_range_spikes))
 print("error spikes: ", error_spikes)
 print("fake spikes: ", total_fake_spikes)
+print("total classified: ", len(predicted_classes))
+print("correctly classified: ", correctly_classifier)
+print("incorrectly classified: ", incorrectly_classified)
+print("fake classified: ", classified_fake_spike)
 
 plt.show()
 
