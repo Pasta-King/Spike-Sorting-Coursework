@@ -4,7 +4,7 @@ import scipy.io as spio
 import tensorflow as tf
 import keras
 
-detector_version = 2
+detector_version = 4
 classifier_version = 5
 
 mat = spio.loadmat("Coursework-Datasets-20251028/D1.mat")
@@ -22,7 +22,9 @@ win_step = 160
 
 d_input = []
 for i in range(train_start, sequence_len - win_size, win_step):
-    d_input.append(d[0][i:i + win_size])
+    d_window = d[0][i:i + win_size]
+    noise = np.random.normal(0, 1, [win_size]) 
+    d_input.append(d_window + noise)
 
 d_input = np.array(d_input).reshape(-1, win_size)
 
