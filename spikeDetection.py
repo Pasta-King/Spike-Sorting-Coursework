@@ -4,7 +4,7 @@ import scipy.io as spio
 import tensorflow as tf
 from keras import datasets, layers, models, backend, losses
 
-model_version = 4
+model_version = 5
 
 mat = spio.loadmat("Coursework-Datasets-20251028/D1.mat")
 d = mat["d"]
@@ -12,6 +12,12 @@ Index = mat["Index"]
 Class = mat["Class"]
 
 sequence_len = len(d[0])
+
+d1_x = np.linspace(0, sequence_len, sequence_len, dtype=int)
+noise = np.random.normal(0, 3, [sequence_len]) 
+noise_wave = 2.5 * np.sin(2*np.pi*0.00000286*d1_x + 4) #0.00001
+# s_Index = np.sort(Index[0])
+d1_noisy = d[0] + noise + noise_wave
 
 # d_zeroes = [[0, 1]] * sequence_len
 # for i in range(0, len(Index[0])):
@@ -37,13 +43,13 @@ d_val_train = []
 d_val_label = []
 
 for i in range(train_start, train_end, win_step):
-    d_window = d[0][i:i + win_size]
+    d_window = d1_noisy[i:i + win_size]
     noise = np.random.normal(0, 1, [win_size]) 
     d_train.append(d_window + noise)
     d_label.append(d_zeroes[i:i + win_size])
 
 for i in range(train_end, sequence_len - win_size, win_step):
-    d_window = d[0][i:i + win_size]
+    d_window = d1_noisy[i:i + win_size]
     noise = np.random.normal(0, 4, [win_size]) 
     d_val_train.append(d_window + noise)
     d_val_label.append(d_zeroes[i:i + win_size])
@@ -58,7 +64,7 @@ d_val_label = np.array(d_val_label) #.reshape(-1, 200)
 input_shape = (200,1)
 model = models.Sequential()
 model.add(layers.Input(shape=input_shape))
-model.add(layers.Normalization(axis=None))
+#model.add(layers.Normalization(axis=None))
 model.add(layers.Conv1D(20, 3, padding="same", activation="sigmoid")) # , input_shape=(200,1)
 # model.add(layers.MaxPooling1D(4))
 model.add(layers.Conv1D(50, 3, padding="same", activation="sigmoid"))
@@ -97,7 +103,7 @@ model.summary()
 
 model.compile(optimizer='adamW', loss=losses.SparseCategoricalCrossentropy(), metrics=["accuracy"])
 
-history = model.fit(d_train, d_label, epochs=20, batch_size=16, validation_data=(d_val_train, d_val_label)) 
+history = model.fit(d_train, d_label, epochs=10, batch_size=16, validation_data=(d_val_train, d_val_label)) 
 
 model.save("models/spike_detection_v" + str(model_version) + ".keras")
 

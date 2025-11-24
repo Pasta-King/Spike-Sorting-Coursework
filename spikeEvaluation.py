@@ -4,7 +4,7 @@ import scipy.io as spio
 import tensorflow as tf
 import keras
 
-detector_version = 4
+detector_version = 5
 classifier_version = 5
 
 mat = spio.loadmat("Coursework-Datasets-20251028/D1.mat")
@@ -16,13 +16,19 @@ sequence_len = len(d[0])
 train_start = 0
 train_end = int(sequence_len * 0.8)
 
+d1_x = np.linspace(0, sequence_len, sequence_len, dtype=int)
+noise = np.random.normal(0, 3, [sequence_len]) 
+noise_wave = 2.5 * np.sin(2*np.pi*0.00000286*d1_x + 4) #0.00001
+# s_Index = np.sort(Index[0])
+d1_noisy = d[0] + noise + noise_wave
+
 win_size = 200
 input_shape = (win_size, 1)
 win_step = 160
 
 d_input = []
 for i in range(train_start, sequence_len - win_size, win_step):
-    d_window = d[0][i:i + win_size]
+    d_window = d1_noisy[i:i + win_size]
     noise = np.random.normal(0, 1, [win_size]) 
     d_input.append(d_window + noise)
 
@@ -44,7 +50,7 @@ output = detector_model.predict(d_input)
 print(Index)
 
 x = np.arange(0, sequence_len).tolist()
-plt.plot(x, d[0])
+plt.plot(x, d1_noisy)
 
 
 relu_flat_output = []
@@ -88,13 +94,13 @@ train_data = []
 for i in range(0, len(predicted_spikes)):
     spike_index = predicted_spikes[i]
     if (spike_index + win_size//2 < sequence_len) and (spike_index - win_size//2 >= 0):
-        train_data.append(d[0][spike_index - win_size//2 : spike_index + win_size//2 ])
+        train_data.append(d1_noisy[spike_index - win_size//2 : spike_index + win_size//2 ])
     elif ((spike_index + win_size//2 < sequence_len)):
-        train_data.append(d[0][: spike_index + win_size//2 ])
+        train_data.append(d1_noisy[: spike_index + win_size//2 ])
     elif (spike_index - win_size//2 >= 0):
-        train_data.append(d[0][spike_index - win_size//2 :])
+        train_data.append(d1_noisy[spike_index - win_size//2 :])
     else:
-        train_data.append(d[0][:])
+        train_data.append(d1_noisy[:])
 
 class_train = np.array(train_data).reshape(-1, win_size) 
 
@@ -108,7 +114,7 @@ for i in classifier_output:
 for i in range(0, len(Index[0])):
     spike_index = Index[0][i]
     
-    plt.plot(spike_index, d[0][spike_index], "kx")
+    plt.plot(spike_index, d1_noisy[spike_index], "kx")
 
 for i in range(0, len(predicted_spikes)):
     true_spike = 0
