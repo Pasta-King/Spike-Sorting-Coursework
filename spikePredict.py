@@ -3,15 +3,30 @@ import matplotlib.pyplot as plt
 import scipy.io as spio
 import tensorflow as tf
 import keras
+from scipy.signal import butter, filtfilt
+from scipy.ndimage import gaussian_filter1d
 
-model_version = 2
-classifier_version = 5
-dataset_name = "D1.mat"
+model_version = 20
+classifier_version = 15
+dataset_name = "D6.mat"
 
-mat = spio.loadmat("Coursework-Datasets-20251028/" + dataset_name)
-d = mat["d"]
+# mat = spio.loadmat("Coursework-Datasets-20251028/" + dataset_name)
+# d = mat["d"]
 
-sequence_len = len(d[0])
+filtered_mat = spio.loadmat("Filtered_Datasets/D6_filtered.mat")
+d1_filtered = filtered_mat["re_wave1"]
+d1_filtered = d1_filtered[:, 0]
+
+# Filtering
+# def butter_highpass_filter(signal, threshold, freq, order=5):
+#     normal_threshold = threshold / (0.5 * freq)
+#     b, a = butter(order, normal_threshold, btype="high", analog=False)
+#     return filtfilt(b, a, signal)
+
+# d1_filtered = gaussian_filter1d(d[0], 5)
+# d1_filtered = butter_highpass_filter(d1_filtered, 5, 25e3)
+
+sequence_len = len(d1_filtered)
 train_start = 0
 train_end = int(sequence_len * 0.8)
 
@@ -21,7 +36,7 @@ win_step = 160
 
 d_train = []
 for i in range(train_start, sequence_len - win_size, win_step):
-    d_train.append(d[0][i:i + win_size])
+    d_train.append(d1_filtered[i:i + win_size])
 
 d_train = np.array(d_train).reshape(-1, win_size)
 
@@ -30,27 +45,41 @@ model = keras.models.load_model("models/spike_detection_v" + str(model_version) 
 output = model.predict(d_train)
 
 x = np.arange(0, sequence_len).tolist()
-plt.plot(x, d[0])
+plt.plot(x, d1_filtered)
 
 
 relu_flat_output = []
 
-# For BinaryCrossEntropy
-#for i in range (0, len(output)):
-#    relu_layer = [1 if x > 0.5 else 0 for x in output[i][:160]]
-#    relu_flat_output = relu_flat_output + relu_layer
-
-# For SparseCategoricalCrossEntropy
+# For Binary
 for i in range (0, len(output)):
     for x in range(0, win_step):
-        if output[i][x][1] >  output[i][x][0]:
-            relu_flat_output.append(1)
-        elif output[i][x][0] >=  output[i][x][1]:
-            relu_flat_output.append(0)
+        if output[i][x] >  0.5:
+            prob_window = np.append(0, output[i][x-10:x+10])
+            max_index = np.argmax(prob_window)
+            if max_index == 11:
+                relu_flat_output.append(1)
+            else:
+                relu_flat_output.append(0)
         else:
-            print("Error spike at: ", len(relu_flat_output))
-            error_spikes += 1
-            relu_flat_output.append(-1)
+            relu_flat_output.append(0)
+
+
+# # For SparseCategoricalCrossEntropy
+# for i in range (0, len(output)):
+#     for x in range(0, win_step):
+#         if output[i][x][1] >  output[i][x][0]:
+#             prob_window = np.append(0, output[i][x-5:x+5, 1])
+#             max_index = np.argmax(prob_window)
+#             if max_index == 6:
+#                 relu_flat_output.append(1)
+#             else:
+#                 relu_flat_output.append(0)
+#         elif output[i][x][0] >=  output[i][x][1]:
+#             relu_flat_output.append(0)
+#         else:
+#             print("Error spike at: ", len(relu_flat_output))
+#             error_spikes += 1
+#             relu_flat_output.append(-1)
 
 predicted_spikes = np.nonzero(relu_flat_output)[0]
 
@@ -63,19 +92,19 @@ for i in range(0, len(predicted_spikes)):
     spike_index = predicted_spikes[i]
 
     if (spike_index + win_size//2 < sequence_len) and (spike_index - win_size//2 >= 0):
-        resized_win_sample = d[0][spike_index - win_size//2 : spike_index + win_size//2 ]
+        resized_win_sample = d1_filtered[spike_index - win_size//2 : spike_index + win_size//2 ]
     elif ((spike_index + win_size//2 < sequence_len)):
-        win_sample = list(d[0][: spike_index + win_size//2 ])
+        win_sample = list(d1_filtered[: spike_index + win_size//2 ])
         average = sum(win_sample) / len(win_sample)
         padding = list([average] * int(win_size - len(win_sample)))
         resized_win_sample = padding + win_sample
     elif (spike_index - win_size//2 >= 0):
-        win_sample = list(d[0][spike_index - win_size//2 :])
+        win_sample = list(d1_filtered[spike_index - win_size//2 :])
         average = sum(win_sample) / len(win_sample)
         padding = list([average] * int(win_size - len(win_sample)))
         resized_win_sample = win_sample + padding
     else:
-        win_sample = list(d[0][:])
+        win_sample = list(d1_filtered[:])
         average = sum(win_sample) / len(win_sample)
         padding = list([average] * int(win_size - len(win_sample) // 2))
         resized_win_sample = padding + win_sample + padding

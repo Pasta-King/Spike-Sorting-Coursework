@@ -3,24 +3,40 @@ import matplotlib.pyplot as plt
 import scipy.io as spio
 import tensorflow as tf
 import keras
+from scipy.signal import butter, filtfilt
+from scipy.ndimage import gaussian_filter1d
 
-detector_version = 5
-classifier_version = 5
+
+detector_version = 16
+classifier_version = 15
 
 mat = spio.loadmat("Coursework-Datasets-20251028/D1.mat")
 d = mat["d"]
 Index = mat["Index"]
 Class = mat["Class"]
 
+filtered_mat = spio.loadmat("Filtered_Datasets/D1_filtered.mat")
+d1_filtered = filtered_mat["re_wave1"]
+d1_filtered = d1_filtered[:, 0]
+
 sequence_len = len(d[0])
-train_start = 0
+train_start = 0 
 train_end = int(sequence_len * 0.8)
 
-d1_x = np.linspace(0, sequence_len, sequence_len, dtype=int)
-noise = np.random.normal(0, 3, [sequence_len]) 
-noise_wave = 2.5 * np.sin(2*np.pi*0.00000286*d1_x + 4) #0.00001
+# d1_x = np.linspace(0, sequence_len, sequence_len, dtype=int)
+# noise = np.random.normal(0, 2, [sequence_len]) 
+# noise_wave = 3 * np.sin(2*np.pi*0.00000286*d1_x + 4) #0.00001
 # s_Index = np.sort(Index[0])
-d1_noisy = d[0] + noise + noise_wave
+# d1_noisy = d[0] #* 2 + noise + noise_wave - 5
+
+# Filtering
+# def butter_highpass_filter(signal, threshold, freq, order=5):
+#     normal_threshold = threshold / (0.5 * freq)
+#     b, a = butter(order, normal_threshold, btype="high", analog=False)
+#     return filtfilt(b, a, signal)
+
+# d1_filtered = gaussian_filter1d(d1_noisy, 5)
+# d1_filtered = butter_highpass_filter(d1_filtered, 5, 25e3)
 
 win_size = 200
 input_shape = (win_size, 1)
@@ -28,9 +44,9 @@ win_step = 160
 
 d_input = []
 for i in range(train_start, sequence_len - win_size, win_step):
-    d_window = d1_noisy[i:i + win_size]
-    noise = np.random.normal(0, 1, [win_size]) 
-    d_input.append(d_window + noise)
+    d_window = d1_filtered[i:i + win_size]
+    #noise = np.random.normal(0, 1, [win_size]) 
+    d_input.append(d_window)
 
 d_input = np.array(d_input).reshape(-1, win_size)
 
@@ -50,7 +66,7 @@ output = detector_model.predict(d_input)
 print(Index)
 
 x = np.arange(0, sequence_len).tolist()
-plt.plot(x, d1_noisy)
+plt.plot(x, d1_filtered)
 
 
 relu_flat_output = []
@@ -62,22 +78,48 @@ error_spikes = 0
 #    relu_flat_output = relu_flat_output + relu_layer
 
 # For SparseCategoricalCrossEntropy
+# for i in range (0, len(output)):
+#     for x in range(0, win_step):
+#         if output[i][x][1] >  output[i][x][0]:
+#             prob_window = np.append(0, output[i][x-5:x+5, 1])
+#             max_index = np.argmax(prob_window)
+#             if max_index == 6:
+#                 relu_flat_output.append(1)
+#             else:
+#                 relu_flat_output.append(0)
+#         elif output[i][x][0] >=  output[i][x][1]:
+#             relu_flat_output.append(0)
+#         else:
+#             print("Error spike at: ", len(relu_flat_output))
+#             error_spikes += 1
+#             relu_flat_output.append(-1)
+
+# For Binary
+# for i in range (0, len(output)):
+#     for x in range(0, win_step):
+#         if output[i][x] >  0.25:
+#             prob_window = np.append(0, output[i][x-4:x+4])
+#             max_index = np.argmax(prob_window)
+#             if max_index == 5:
+#                 relu_flat_output.append(1)
+#             else:
+#                 relu_flat_output.append(0)
+#         else:
+#             relu_flat_output.append(0)
+
 for i in range (0, len(output)):
     for x in range(0, win_step):
-        if output[i][x][1] >  output[i][x][0]:
+        if output[i][x] >  0.5:
             relu_flat_output.append(1)
-        elif output[i][x][0] >=  output[i][x][1]:
-            relu_flat_output.append(0)
         else:
-            print("Error spike at: ", len(relu_flat_output))
-            error_spikes += 1
-            relu_flat_output.append(-1)
+            relu_flat_output.append(0)
 
 #print(len(output))
 
 
 total_true_spikes = 0
 total_in_range_spikes = 0
+total_duplicate_spikes = 0
 total_fake_spikes = 0
 correctly_classifier = 0
 incorrectly_classified = 0
@@ -94,13 +136,13 @@ train_data = []
 for i in range(0, len(predicted_spikes)):
     spike_index = predicted_spikes[i]
     if (spike_index + win_size//2 < sequence_len) and (spike_index - win_size//2 >= 0):
-        train_data.append(d1_noisy[spike_index - win_size//2 : spike_index + win_size//2 ])
+        train_data.append(d1_filtered[spike_index - win_size//2 : spike_index + win_size//2 ])
     elif ((spike_index + win_size//2 < sequence_len)):
-        train_data.append(d1_noisy[: spike_index + win_size//2 ])
+        train_data.append(d1_filtered[: spike_index + win_size//2 ])
     elif (spike_index - win_size//2 >= 0):
-        train_data.append(d1_noisy[spike_index - win_size//2 :])
+        train_data.append(d1_filtered[spike_index - win_size//2 :])
     else:
-        train_data.append(d1_noisy[:])
+        train_data.append(d1_filtered[:])
 
 class_train = np.array(train_data).reshape(-1, win_size) 
 
@@ -114,7 +156,7 @@ for i in classifier_output:
 for i in range(0, len(Index[0])):
     spike_index = Index[0][i]
     
-    plt.plot(spike_index, d1_noisy[spike_index], "kx")
+    plt.plot(spike_index, d1_filtered[spike_index], "kx")
 
 for i in range(0, len(predicted_spikes)):
     true_spike = 0
@@ -130,11 +172,15 @@ for i in range(0, len(predicted_spikes)):
     
     if true_spike == 0:
         for x in range(0, len(Index[0])):
-            if (predicted_spikes[i] < Index[0][x] + 50) and (predicted_spikes[i] > Index[0][x] - 50) and (predicted_spikes[i] != Index[0][x]):
-                plt.vlines(predicted_spikes[i], 0, 4, colors="m")
-                total_in_range_spikes += 1
-                in_range_spike = 1
-                true_class = Class[0][x]
+            if (predicted_spikes[i] < Index[0][x] + 50) and (predicted_spikes[i] > Index[0][x] - 50):
+                if in_range_spike == 0:
+                    total_in_range_spikes += 1
+                    in_range_spike = 1
+                    plt.vlines(predicted_spikes[i], 0, 4, colors="m")
+                    true_class = Class[0][x]
+                else:
+                    total_duplicate_spikes += 1
+                    
 
     if true_class != 8000:
         if true_class == predicted_classes[i]:
@@ -148,6 +194,7 @@ for i in range(0, len(predicted_spikes)):
     if (true_spike == 0) and (in_range_spike == 0):
         plt.vlines(i, 0, 4, colors="r")
         total_fake_spikes += 1
+
 
 
 # Going through real spikes and checking accuracy]
@@ -184,6 +231,7 @@ print("total spikes: ", len(Index[0]))
 print("total predicted spikes:", len(predicted_spikes))
 print("true spikes: ", total_true_spikes)
 print("spikes in range: ", total_in_range_spikes)
+print("in multiple ranges: ", total_duplicate_spikes)
 print("missing spikes: ", len(Index[0]) - (total_true_spikes + total_in_range_spikes))
 print("error spikes: ", error_spikes)
 print("fake spikes: ", total_fake_spikes)
