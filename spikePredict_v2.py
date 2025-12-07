@@ -3,17 +3,17 @@ import matplotlib.pyplot as plt
 import scipy.io as spio
 import tensorflow as tf
 import keras
-from scipy.signal import butter, filtfilt
+from scipy.signal import butter, filtfilt, find_peaks
 from scipy.ndimage import gaussian_filter1d
 
 model_version = 20
-classifier_version = 15
-dataset_name = "D6.mat"
+classifier_version = 18
+dataset_name = "D1.mat"
 
 # mat = spio.loadmat("Coursework-Datasets-20251028/" + dataset_name)
 # d = mat["d"]
 
-filtered_mat = spio.loadmat("Filtered_Datasets/D6_filtered.mat")
+filtered_mat = spio.loadmat("Filtered_Datasets/D1_filtered.mat")
 d1_filtered = filtered_mat["re_wave1"]
 d1_filtered = d1_filtered[:, 0]
 
@@ -84,12 +84,23 @@ for i in range (0, len(output)):
 predicted_spikes = np.nonzero(relu_flat_output)[0]
 
 classifier_model = keras.models.load_model("models/spike_classification_v" + str(classifier_version) + ".keras")
+adjusted_predicted_spikes = []
 
 win_size = 100
 train_data = []
 
 for i in range(0, len(predicted_spikes)):
     spike_index = predicted_spikes[i]
+
+    local_peaks, properties = find_peaks(d1_filtered[spike_index-10:spike_index+10], height=0.2)
+    if len(local_peaks) <= 1:
+        adjusted_predicted_spikes.append(spike_index)
+    else:
+        for x in range(0, len(local_peaks)):
+            adjusted_predicted_spikes.append(spike_index + x)
+
+for i in range(0, len(adjusted_predicted_spikes)):
+    spike_index = adjusted_predicted_spikes[i]
 
     if (spike_index + win_size//2 < sequence_len) and (spike_index - win_size//2 >= 0):
         resized_win_sample = d1_filtered[spike_index - win_size//2 : spike_index + win_size//2 ]
@@ -127,7 +138,7 @@ print(len(predicted_classes))
 # print(predicted_spikes)
 # print(predicted_classes)
 
-mat_dict = {"Index": predicted_spikes, "Class": predicted_classes}
+mat_dict = {"Index": adjusted_predicted_spikes, "Class": predicted_classes}
 spio.savemat("results/" + dataset_name, mat_dict)
 
 # # Going through predicted spikes and checking accuracy
@@ -139,3 +150,14 @@ spio.savemat("results/" + dataset_name, mat_dict)
 
 
 # plt.show()
+
+# real_mat = spio.loadmat("results/D2.mat")
+# d1_real_indexes = real_mat["Index"]
+
+# diff = 0
+
+# for i in range(0, len(d1_real_indexes[0])):
+#     if d1_real_indexes[0][i] != predicted_spikes[i]:
+#         diff += 1
+
+# print("diff = ", diff)
