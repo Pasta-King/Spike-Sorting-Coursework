@@ -10,7 +10,7 @@ from detectionEvaluationFunction import indexDelta50Verification
 
 detector_version = 31
 second_detect_version = 5
-classifier_version = 18
+classifier_version = 21
 
 mat = spio.loadmat("Coursework-Datasets-20251028/D1.mat")
 d = mat["d"]
@@ -125,6 +125,97 @@ classified_fake_spike = 0
 
 indexDelta50Verification(Index[0], precise_pred_indexes)
 
+class_pos_sequence = np.zeros(sequence_len, dtype=np.float64)
+for i in range(0, len(Index[0])):
+    class_pos_sequence[Index[0][i]]= Class[0][i]
+
+
+print("Classifier")
+
+classifier_model = keras.models.load_model("models/spike_classification_v" + str(classifier_version) + ".keras")
+classifier_model.summary()
+
+win_size = 200
+class_train = []
+
+for i in range(0, int(len(precise_pred_indexes))):
+    for x in range(-6, 6):
+        
+        if (precise_pred_indexes[i] + x - (win_size//2)) < 0:
+            d_window = d1_filtered[0 : int(precise_pred_indexes[i] + (win_size//2) + x)]
+            upper_half = class_pos_sequence[int(precise_pred_indexes[i] + x) : int(precise_pred_indexes[i] + (win_size//2) + x)]
+            bottom_half = class_pos_sequence[0: int(precise_pred_indexes[i] + x)]
+            avg = np.mean(d_window)
+            padding_size = int((win_size//2) - len(bottom_half))
+            d_window = np.concatenate([[avg] * padding_size, d_window], axis=0) # * int((win_size//2) - precise_pred_indexes[i])
+            bottom_half = np.concatenate([[0] * padding_size, bottom_half], axis=0) 
+        elif (precise_pred_indexes[i] + x + (win_size//2)) > len(d1_filtered):
+            d_window = d1_filtered[int(precise_pred_indexes[i] - (win_size//2)) : ]
+            upper_half = class_pos_sequence[int(precise_pred_indexes[i] + x) : ]
+            bottom_half = class_pos_sequence[int(precise_pred_indexes[i] - (win_size//2) + x) : int(precise_pred_indexes[i] + x)]
+            avg = np.mean(d_window)
+            padding_size = int((win_size//2) - len(upper_half))
+            d_window = np.concatenate([d_window, [avg] * padding_size ], axis=0)
+            upper_half = np.concatenate([upper_half, [0] * padding_size], axis=0)
+        else:
+            d_window = d1_filtered[int(precise_pred_indexes[i] + x - (win_size//2)) : int(precise_pred_indexes[i] + x + (win_size//2))]
+            upper_half = class_pos_sequence[int(precise_pred_indexes[i] + x) : int(precise_pred_indexes[i] + (win_size//2) + x)]
+            bottom_half = class_pos_sequence[int(precise_pred_indexes[i] - (win_size//2) + x) : int(precise_pred_indexes[i] + x)]
+
+        class_train.append(d_window)
+
+class_train = np.array(class_train).reshape(-1, win_size)
+
+classifier_output = classifier_model.predict(class_train)
+
+predicted_classes = []
+for i in classifier_output:
+    max_prob_index = np.argmax(i) 
+    predicted_classes.append(max_prob_index)
+
+for i in range(0, len(Index[0])):
+    spike_index = Index[0][i]
+    
+    plt.plot(spike_index, d1_filtered[spike_index], "kx")
+
+for i in range(0, len(precise_pred_indexes)):
+    true_spike = 0
+    in_range_spike = 0
+    true_class = 8000
+
+    for x in range(0, len(Index[0])):
+        if precise_pred_indexes[i] == Index[0][x]:
+            plt.vlines(precise_pred_indexes[i], 0, 4, colors="g")
+            total_true_spikes += 1
+            true_spike = 1
+            true_class = Class[0][x]
+    
+    if true_spike == 0:
+        for x in range(0, len(Index[0])):
+            if (precise_pred_indexes[i] < Index[0][x] + 50) and (precise_pred_indexes[i] > Index[0][x] - 50):
+                if in_range_spike == 0:
+                    total_in_range_spikes += 1
+                    in_range_spike = 1
+                    plt.vlines(precise_pred_indexes[i], 0, 4, colors="m")
+                    true_class = Class[0][x]
+                else:
+                    total_duplicate_spikes += 1
+                    
+
+    if true_class != 8000:
+        if true_class == predicted_classes[i]:
+            correctly_classifier += 1
+        else:
+            incorrectly_classified += 1
+    else:
+        classified_fake_spike += 1
+
+    
+    if (true_spike == 0) and (in_range_spike == 0):
+        plt.vlines(i, 0, 4, colors="r")
+        total_fake_spikes += 1
+
+plt.show()
 # for i in range(0, len(sorted_Index)):
 #     if np.any(precise_spike_sequence[sorted_Index[i] - 50: sorted_Index[i] + 50]):
 #         total_indexes_matched += 1
@@ -147,3 +238,7 @@ indexDelta50Verification(Index[0], precise_pred_indexes)
 
 print("precise spikes: ", precise_spikes)
 print("imprecise spikes: ", imprecise_spikes)
+print("total classified: ", len(predicted_classes))
+print("correctly classified: ", correctly_classifier)
+print("incorrectly classified: ", incorrectly_classified)
+print("fake classified: ", classified_fake_spike)

@@ -7,7 +7,7 @@ from keras import datasets, layers, models, backend, losses
 from scipy.signal import butter, filtfilt
 from scipy.ndimage import gaussian_filter1d
 
-model_version = 15
+model_version = 22
 
 mat = spio.loadmat("Coursework-Datasets-20251028/D1.mat")
 d = mat["d"]

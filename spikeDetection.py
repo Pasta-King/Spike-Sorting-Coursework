@@ -6,7 +6,7 @@ from keras import datasets, layers, models, backend, losses
 from scipy.signal import butter, filtfilt
 from scipy.ndimage import gaussian_filter1d
 
-model_version = 20
+model_version = 32
 
 mat = spio.loadmat("Coursework-Datasets-20251028/D1.mat")
 d = mat["d"]
@@ -41,7 +41,7 @@ sequence_len = len(d[0])
 
 d_zeroes = np.zeros(sequence_len, dtype=np.float64)
 for i in range(0, len(Index[0])):
-    d_zeroes[Index[0][i] - 3: Index[0][i] + 4]= [1, 1, 1, 1, 1, 1, 1] # Class[0][i]
+    d_zeroes[Index[0][i] - 4: Index[0][i] + 5] = [0.7, 0.75, 0.8, 0.85, 1, 0.85, 0.8, 0.75, 0.7] # Class[0][i]
     # d_zeroes[Index[0][i]] = 1
     # print(d_zeroes[Index[0][i] - 4: Index[0][i] + 6])
 
@@ -53,9 +53,9 @@ for i in range(0, len(Index[0])):
 train_start = 0
 train_end = int(sequence_len * 0.8)
 
-win_size = 80
+win_size = 50
 input_shape = (win_size, 1)
-win_step = 50
+win_step = 30
 
 d_train = []
 d_label = []
@@ -82,21 +82,16 @@ d_val_label = np.array(d_val_label) #.reshape(-1, 200)
 
 
 input_shape = (50,1)
+input_shape = (50,1)
 model = models.Sequential()
 model.add(layers.Input(shape=input_shape))
 model.add(layers.Normalization(axis=None))
-# model.add(layers.LSTM(200, activation="tanh",  recurrent_activation="sigmoid", return_sequences=True))
-model.add(layers.Conv1D(34, 3, padding="same", activation="sigmoid")) # , input_shape=(200,1)
-# model.add(layers.MaxPooling1D(4))
+model.add(layers.Conv1D(34, 3, padding="same", activation="sigmoid")) 
 model.add(layers.Conv1D(64, 3, padding="same", activation="sigmoid"))
 model.add(layers.Conv1D(120, 3, padding="same", activation="sigmoid"))
 model.add(layers.Conv1D(256, 3, padding="same", activation="sigmoid"))
-# model.add(layers.Conv1D(50, 3, padding="same", activation="sigmoid"))
-# model.add(layers.MaxPooling1D(4))
 model.add(layers.Dense(800, activation="sigmoid"))
 model.add(layers.Dense(600, activation="sigmoid"))
-# model.add(layers.Dense(200, activation="sigmoid"))
-#model.add(layers.Dense(200, activation="sigmoid"))
 model.add(layers.Dense(1, activation="sigmoid"))
 model.summary()
 
@@ -121,12 +116,12 @@ model.summary()
     #         spike_present = 1
     #         loss = 0
 
-# if there is a spike, loss = sum (prob at index * distance to true spike index) - prob at true spike index
+# if there is a spike, loss = sum (prob at index * distance to true spike index) - prob at true spike indexmnjh
 # if there is no spike, loss = sum (prob at index * mean distance) 
 
 model.compile(optimizer='adamW', loss=losses.BinaryCrossentropy(), metrics=["accuracy"])
 
-history = model.fit(d_train, d_label, epochs=10, batch_size=16, validation_data=(d_val_train, d_val_label)) 
+history = model.fit(d_train, d_label, epochs=30, batch_size=16, validation_data=(d_val_train, d_val_label)) 
 
 model.save("models/spike_detection_v" + str(model_version) + ".keras")
 

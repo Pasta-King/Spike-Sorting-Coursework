@@ -5,6 +5,7 @@ import tensorflow as tf
 import keras
 from scipy.signal import butter, filtfilt
 from scipy.ndimage import gaussian_filter1d
+from detectionEvaluationFunction import indexDelta50Verification
 
 
 detector_version = 20
@@ -38,9 +39,9 @@ train_end = int(sequence_len * 0.8)
 # d1_filtered = gaussian_filter1d(d1_noisy, 5)
 # d1_filtered = butter_highpass_filter(d1_filtered, 5, 25e3)
 
-win_size = 200
+win_size = 50
 input_shape = (win_size, 1)
-win_step = 160
+win_step = 30
 
 d_input = []
 for i in range(train_start, sequence_len - win_size, win_step):
@@ -241,6 +242,8 @@ print("total classified: ", len(predicted_classes))
 print("correctly classified: ", correctly_classifier)
 print("incorrectly classified: ", incorrectly_classified)
 print("fake classified: ", classified_fake_spike)
+
+indexDelta50Verification(Index[0], predicted_spikes)
 
 plt.show()
 

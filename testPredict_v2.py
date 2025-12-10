@@ -6,14 +6,14 @@ import keras
 from scipy.signal import butter, filtfilt
 from scipy.ndimage import gaussian_filter1d
 
-model_version = 20
-classifier_version = 15
-dataset_name = "D2.mat"
+model_version = 32
+classifier_version = 22
+dataset_name = "D6.mat"
 
 # mat = spio.loadmat("Coursework-Datasets-20251028/" + dataset_name)
 # d = mat["d"]
 
-filtered_mat = spio.loadmat("Filtered_Datasets/D2_filtered.mat")
+filtered_mat = spio.loadmat("Filtered_Datasets/D6_filtered.mat")
 d1_filtered = filtered_mat["re_wave1"]
 d1_filtered = d1_filtered[:, 0]
 
@@ -28,7 +28,7 @@ d1_filtered = d1_filtered[:, 0]
 
 sequence_len = len(d1_filtered)
 train_start = 0
-train_end = int(sequence_len * 0.8)
+
 
 win_size = 200
 input_shape = (win_size, 1)

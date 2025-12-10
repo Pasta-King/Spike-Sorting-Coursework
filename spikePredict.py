@@ -6,8 +6,8 @@ import keras
 from scipy.signal import butter, filtfilt
 from scipy.ndimage import gaussian_filter1d
 
-model_version = 20
-classifier_version = 15
+model_version = 32
+classifier_version = 22
 dataset_name = "D6.mat"
 
 # mat = spio.loadmat("Coursework-Datasets-20251028/" + dataset_name)

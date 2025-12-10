@@ -7,7 +7,7 @@ from keras import datasets, layers, models, backend, losses
 from scipy.signal import butter, filtfilt
 from scipy.ndimage import gaussian_filter1d
 
-model_version = 21
+model_version = 23
 detector_version = 32
 second_detect_version = 5
 
@@ -25,7 +25,7 @@ train_start = 0
 
 win_size = 50
 input_shape = (win_size, 1)
-win_step = win_size
+win_step = 30
 
 d_input = []
 for i in range(train_start, sequence_len - win_size, win_step):
@@ -34,68 +34,27 @@ for i in range(train_start, sequence_len - win_size, win_step):
 
 d_input = np.array(d_input).reshape(-1, win_size)
 
-print("Detection")
-detector_model = keras.models.load_model("models/spike_detection_v" + str(detector_version) + ".keras")
+second_detect_model = keras.models.load_model("models/spike_detection_v" + str(detector_version) + ".keras")
 
-# detector_model.summary()
-
-output = detector_model.predict(d_input)
-
-x = np.arange(0, sequence_len).tolist()
-plt.plot(x, d1_filtered)
-
-
-relu_flat_output = []
-pred_spike_indexes = []
-error_spikes = 0
-
-# For Binary
-for i in range (0, len(output)):
-    if output[i] >= 0.3:
-        if win_size // 2:
-            output_window = [0] * (win_size//2) + [1] + [0] * ((win_size-1)//2)
-        else: 
-            output_window = [0] * (win_size//2) + [1] + [0] * (win_size//2)
-        relu_flat_output = relu_flat_output + output_window
-
-        pred_spike_indexes.append((i * win_size) + (win_size//2))
-    
-    else:
-        output_window = [0] * win_size
-        relu_flat_output = relu_flat_output + output_window
-
-
-precise_spike_sequence = np.zeros(sequence_len, dtype=np.float64)
-
-second_detect_model = keras.models.load_model("models/spike_detect_second_stage_v" + str(second_detect_version) + ".keras")
-
-d_input = []
-for i in range(0, len(pred_spike_indexes)):
-    d_window = d1_filtered[int(pred_spike_indexes[i]) - (win_size//2) : int(pred_spike_indexes[i]) + (win_size//2)]
-    d_input.append(d_window)
-
-d_input = np.array(d_input).reshape(-1, win_size)
-
-
-second_detect_model = keras.models.load_model("models/spike_detect_second_stage_v" + str(second_detect_version) + ".keras")
 
 print("Second Stage")
 output = second_detect_model.predict(d_input)# [0, :, 0]
     
-for i in range(0, len(output)):
-    output_window = output[i]
+relu_flat_output = []
+for i in range (0, len(output)):
+    for x in range(0, win_step):
+        if output[i][x] >  0.5:
+            prob_window = np.append(0, output[i][x-10:x+10])
+            max_index = np.argmax(prob_window)
+            if max_index == 11:
+                relu_flat_output.append(1)
+            else:
+                relu_flat_output.append(0)
+        else:
+            relu_flat_output.append(0)
 
-    win_pred_spike = np.nonzero(output_window > 0.6)[0]
 
-    if len(win_pred_spike) > 0:
-        for x in win_pred_spike:
-            precise_spike_sequence[(pred_spike_indexes[i] - (win_size//2)) + x] = 1
-
-    else:
-        precise_spike_sequence[(pred_spike_indexes[i] - (win_size//2)) + np.argmax(output[i])] = 1 
-
-
-precise_pred_indexes = np.nonzero(precise_spike_sequence)[0]
+precise_pred_indexes = np.nonzero(relu_flat_output)[0]
 
 train_start = 0
 
@@ -143,27 +102,27 @@ for i in range(0, int(len(precise_pred_indexes) * 0.8)):
         bottom_class_index = np.nonzero(bottom_half)[0]
         
         if (len(upper_class_index) == 0) and (len(bottom_class_index) == 0):
-            label_options = [1, 0, 0, 0, 0, 0]
+            label_options = [0, 0, 0, 0, 0]
             d_label.append(label_options)
         elif len(upper_class_index) == 0:
             nearest_class = int(bottom_half[bottom_class_index[0]])
-            label_options = [0, 0, 0, 0, 0, 0]
-            label_options[nearest_class] = 1
+            label_options = [0, 0, 0, 0, 0]
+            label_options[nearest_class -1] = 1
             d_label.append(label_options)
         elif len(bottom_class_index) == 0:
             nearest_class = int(upper_half[upper_class_index[0]])
-            label_options = [0, 0, 0, 0, 0, 0]
-            label_options[nearest_class] = 1
+            label_options = [0, 0, 0, 0, 0]
+            label_options[nearest_class -1] = 1
             d_label.append(label_options)
         elif upper_class_index[0] <= ((win_size//2) - bottom_class_index[0]):
             nearest_class = int(upper_half[upper_class_index[0]])
-            label_options = [0, 0, 0, 0, 0, 0]
-            label_options[nearest_class] = 1
+            label_options = [0, 0, 0, 0, 0]
+            label_options[nearest_class -1] = 1
             d_label.append(label_options)
         else:
             nearest_class = int(bottom_half[bottom_class_index[0]])
-            label_options = [0, 0, 0, 0, 0, 0]
-            label_options[nearest_class] = 1
+            label_options = [0, 0, 0, 0, 0]
+            label_options[nearest_class -1] = 1
             d_label.append(label_options)
 
 for i in range(int(len(precise_pred_indexes) * 0.8), len(precise_pred_indexes)):
@@ -196,34 +155,34 @@ for i in range(int(len(precise_pred_indexes) * 0.8), len(precise_pred_indexes)):
         bottom_class_index = np.nonzero(bottom_half)[0]
         
         if (len(upper_class_index) == 0) and (len(bottom_class_index) == 0):
-            label_options = [1, 0, 0, 0, 0, 0]
+            label_options = [0, 0, 0, 0, 0]
             d_val_label.append(label_options)
         elif len(upper_class_index) == 0:
             nearest_class = int(bottom_half[bottom_class_index[0]])
-            label_options = [0, 0, 0, 0, 0, 0]
-            label_options[nearest_class] = 1
+            label_options = [0, 0, 0, 0, 0]
+            label_options[nearest_class -1] = 1
             d_val_label.append(label_options)
         elif len(bottom_class_index) == 0:
             nearest_class = int(upper_half[upper_class_index[0]])
-            label_options = [0, 0, 0, 0, 0, 0]
-            label_options[nearest_class] = 1
+            label_options = [0, 0, 0, 0, 0]
+            label_options[nearest_class -1] = 1
             d_val_label.append(label_options)
         elif upper_class_index[0] <= ((win_size//2) - bottom_class_index[0]):
             nearest_class = int(upper_half[upper_class_index[0]])
-            label_options = [0, 0, 0, 0, 0, 0]
-            label_options[nearest_class] = 1
+            label_options = [0, 0, 0, 0, 0]
+            label_options[nearest_class -1] = 1
             d_val_label.append(label_options)
         else:
             nearest_class = int(bottom_half[bottom_class_index[0]])
-            label_options = [0, 0, 0, 0, 0, 0]
-            label_options[nearest_class] = 1
+            label_options = [0, 0, 0, 0, 0]
+            label_options[nearest_class -1] = 1
             d_val_label.append(label_options)
 
 
 d_train = np.array(d_train).reshape(-1, win_size)
-d_label = np.array(d_label).reshape(-1, 6)
+d_label = np.array(d_label).reshape(-1, 5)
 d_val_train = np.array(d_val_train).reshape(-1, win_size)
-d_val_label = np.array(d_val_label).reshape(-1, 6)
+d_val_label = np.array(d_val_label).reshape(-1, 5)
 
 
 model = models.Sequential()
@@ -237,7 +196,7 @@ model.add(layers.Conv1D(150, 3, padding="same", activation="sigmoid"))
 model.add(layers.Flatten())
 model.add(layers.Dense(80, activation="sigmoid"))
 model.add(layers.Dense(30, activation="sigmoid"))
-model.add(layers.Dense(6, activation="sigmoid"))
+model.add(layers.Dense(5, activation="sigmoid"))
 model.summary()
 
 model.compile(optimizer='adamW', loss=losses.CategoricalCrossentropy(), metrics=["accuracy"])
