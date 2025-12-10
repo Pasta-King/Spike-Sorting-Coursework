@@ -6,7 +6,7 @@ from keras import datasets, layers, models, backend, losses
 from scipy.signal import butter, filtfilt
 from scipy.ndimage import gaussian_filter1d
 
-model_version = 28
+model_version = 31
 
 mat = spio.loadmat("Coursework-Datasets-20251028/D1.mat")
 d = mat["d"]
@@ -62,29 +62,21 @@ d_val_label = np.array(d_val_label) #.reshape(-1, 200)
 
 model = models.Sequential()
 model.add(layers.Input(shape=input_shape))
-model.add(layers.Normalization(axis=None))
-# model.add(layers.LSTM(200, activation="tanh",  recurrent_activation="sigmoid", return_sequences=True))
-model.add(layers.Conv1D(2, 3, padding="same", activation="sigmoid")) # , input_shape=(200,1)
-# model.add(layers.MaxPooling1D(4))
-model.add(layers.Conv1D(4, 3, padding="same", activation="sigmoid"))
-model.add(layers.Conv1D(8, 3, padding="same", activation="sigmoid"))
-model.add(layers.Conv1D(16, 3, padding="same", activation="sigmoid"))
-model.add(layers.Conv1D(32, 3, padding="same", activation="sigmoid"))
-model.add(layers.Conv1D(64, 3, padding="same", activation="sigmoid"))
-# model.add(layers.Conv1D(50, 3, padding="same", activation="sigmoid"))
-# model.add(layers.MaxPooling1D(4))
-model.add(layers.Flatten())
-model.add(layers.Dense(600, activation="sigmoid"))
-model.add(layers.Dense(300, activation="sigmoid"))
-# model.add(layers.Dense(200, activation="sigmoid"))
-# model.add(layers.Dense(200, activation="sigmoid"))
+# model.add(layers.Normalization(axis=None))
+model.add(layers.Conv1D(16, 3, padding="same", activation="relu")) # , input_shape=(200,1)
+model.add(layers.Conv1D(32, 3, padding="same", activation="relu"))
+model.add(layers.Conv1D(64, 3, padding="same", activation="relu"))
+model.add(layers.Conv1D(128, 3, padding="same", activation="relu"))
+model.add(layers.GlobalMaxPooling1D())
+# model.add(layers.Flatten())
+model.add(layers.Dense(64, activation="sigmoid"))
 model.add(layers.Dense(1, activation="sigmoid"))
 model.summary()
 
 
 model.compile(optimizer='adamW', loss=losses.BinaryCrossentropy(), metrics=["accuracy"])
 
-history = model.fit(d_train, d_label, epochs=20, batch_size=32, validation_data=(d_val_train, d_val_label)) 
+history = model.fit(d_train, d_label, epochs=20, batch_size=18, validation_data=(d_val_train, d_val_label)) 
 
 model.save("models/spike_detection_v" + str(model_version) + ".keras")
 

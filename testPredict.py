@@ -8,14 +8,14 @@ from scipy.ndimage import gaussian_filter1d
 
 
 detector_version = 31
-second_detect_version = 4
+second_detect_version = 5
 classifier_version = 19
-dataset_name = "D6.mat"
+dataset_name = "D2.mat"
 
 # mat = spio.loadmat("Coursework-Datasets-20251028/" + dataset_name)
 # d = mat["d"]
 
-filtered_mat = spio.loadmat("Filtered_Datasets/D6_filtered.mat")
+filtered_mat = spio.loadmat("Filtered_Datasets/D2_filtered.mat")
 d1_filtered = filtered_mat["re_wave1"]
 d1_filtered = d1_filtered[:, 0]
 
@@ -33,11 +33,11 @@ for i in range(train_start, sequence_len - win_size, win_step):
 
 d_input = np.array(d_input).reshape(-1, win_size)
 
-print("Detection")
+
 detector_model = keras.models.load_model("models/spike_detection_v" + str(detector_version) + ".keras")
 
 # detector_model.summary()
-
+print("Detection")
 output = detector_model.predict(d_input)
 
 x = np.arange(0, sequence_len).tolist()
@@ -66,7 +66,7 @@ for i in range (0, len(output)):
 
 precise_spike_sequence = np.zeros(sequence_len, dtype=np.float64)
 
-
+second_detect_model = keras.models.load_model("models/spike_detect_second_stage_v" + str(second_detect_version) + ".keras")
 
 d_input = []
 for i in range(0, len(pred_spike_indexes)):
@@ -75,21 +75,28 @@ for i in range(0, len(pred_spike_indexes)):
 
 d_input = np.array(d_input).reshape(-1, win_size)
 
-print("Second Stage")
+
 second_detect_model = keras.models.load_model("models/spike_detect_second_stage_v" + str(second_detect_version) + ".keras")
 
+print("Second Stage")
 output = second_detect_model.predict(d_input)# [0, :, 0]
     
+precise_spikes = 0
+imprecise_spikes = 0
+
 for i in range(0, len(output)):
     output_window = output[i]
 
-    win_pred_spike = np.nonzero(output_window > 0.6)[0]
+    win_pred_spike = np.nonzero(output_window > 0.5)[0]
 
     if len(win_pred_spike) > 0:
         for x in win_pred_spike:
-            precise_spike_sequence[(pred_spike_indexes[i] - (win_size//2)) + x] = 1
+            if np.all(output_window[x-1: x+2] > 0.5):
+                precise_spikes += 1
+                precise_spike_sequence[(pred_spike_indexes[i] - (win_size//2)) + x] = 1
 
     else:
+        imprecise_spikes += 1
         precise_spike_sequence[(pred_spike_indexes[i] - (win_size//2)) + np.argmax(output[i])] = 1 
 
 
@@ -108,10 +115,11 @@ for i in range(0, int(len(precise_pred_indexes))):
         d_window = d1_filtered[0 : int(precise_pred_indexes[i] + (win_size//2))]
         avg = np.mean(d_window)
         d_window = np.concatenate([[avg] * int((win_size//2) - precise_pred_indexes[i]), d_window], axis=0) # * int((win_size//2) - precise_pred_indexes[i])
-    elif (precise_pred_indexes[i] + (win_size//2)) > pred_len:
+    elif (precise_pred_indexes[i] + (win_size//2)) > sequence_len:
         d_window = d1_filtered[int(precise_pred_indexes[i] - (win_size//2)) : ]
         avg = np.mean(d_window)
-        d_window = np.concatenate([d_window, [avg] * int((win_size//2) + precise_pred_indexes[i] - pred_len)], axis=0)
+
+        d_window = np.concatenate([d_window, [avg] * int((win_size//2) + precise_pred_indexes[i] - sequence_len)], axis=0)
     else:
         d_window = d1_filtered[int(precise_pred_indexes[i] - (win_size//2)) : int(precise_pred_indexes[i] + (win_size//2))]
     
@@ -133,11 +141,10 @@ for i in range(0, len(classifier_output)):
 
     if max_prob_index > 0:
         predicted_classes.append(max_prob_index)
-        adjusted_predicted_spikes.append(precise_pred_indexes[i+1])
+        adjusted_predicted_spikes.append(precise_pred_indexes[i])
 
 print(len(predicted_classes))
+print("precise spikes: ", precise_spikes)
+print("imprecise spikes: ", imprecise_spikes)
 # print(predicted_spikes)
 # print(predicted_classes)
-
-mat_dict = {"Index": adjusted_predicted_spikes, "Class": predicted_classes}
-spio.savemat("results/" + dataset_name, mat_dict)

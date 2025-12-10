@@ -7,7 +7,9 @@ from keras import datasets, layers, models, backend, losses
 from scipy.signal import butter, filtfilt
 from scipy.ndimage import gaussian_filter1d
 
-model_version = 18
+model_version = 20
+detector_version = 31
+second_detect_version = 5
 
 mat = spio.loadmat("Coursework-Datasets-20251028/D1.mat")
 d = mat["d"]
@@ -19,63 +21,228 @@ d1_filtered = filtered_mat["re_wave1"]
 d1_filtered = d1_filtered[:, 0]
 
 sequence_len = len(d[0])
-train_start = 0
-train_end = int(sequence_len * 0.8)
+train_start = 0 
 
-win_size = 100
+win_size = 50
 input_shape = (win_size, 1)
-win_step = 160
+win_step = win_size
 
 d_input = []
 for i in range(train_start, sequence_len - win_size, win_step):
-    d_input.append(d1_filtered[i:i + win_size])
+    d_window = d1_filtered[i:i + win_size]
+    d_input.append(d_window)
 
 d_input = np.array(d_input).reshape(-1, win_size)
 
-train_data = []
-label_data = []
+print("Detection")
+detector_model = keras.models.load_model("models/spike_detection_v" + str(detector_version) + ".keras")
 
-num_of_spikes = len(Index[0])
+# detector_model.summary()
 
-for i in range(-12, 12, 1):
-    for x in range(0, num_of_spikes):
-        spike_index = Index[0][x]
-        if (spike_index + win_size//2 < sequence_len) and (spike_index - win_size//2 >= 0):
-            train_data.append(d1_filtered[spike_index + i - win_size//2 : spike_index + i + win_size//2 ])
-        elif ((spike_index + win_size//2 < sequence_len)):
-            train_data.append(d1_filtered[: spike_index + win_size//2 ])
-        elif (spike_index - win_size//2 >= 0):
-            train_data.append(d1_filtered[spike_index - win_size//2 :])
+output = detector_model.predict(d_input)
+
+x = np.arange(0, sequence_len).tolist()
+plt.plot(x, d1_filtered)
+
+
+relu_flat_output = []
+pred_spike_indexes = []
+error_spikes = 0
+
+# For Binary
+for i in range (0, len(output)):
+    if output[i] >= 0.3:
+        if win_size // 2:
+            output_window = [0] * (win_size//2) + [1] + [0] * ((win_size-1)//2)
+        else: 
+            output_window = [0] * (win_size//2) + [1] + [0] * (win_size//2)
+        relu_flat_output = relu_flat_output + output_window
+
+        pred_spike_indexes.append((i * win_size) + (win_size//2))
+    
+    else:
+        output_window = [0] * win_size
+        relu_flat_output = relu_flat_output + output_window
+
+
+precise_spike_sequence = np.zeros(sequence_len, dtype=np.float64)
+
+second_detect_model = keras.models.load_model("models/spike_detect_second_stage_v" + str(second_detect_version) + ".keras")
+
+d_input = []
+for i in range(0, len(pred_spike_indexes)):
+    d_window = d1_filtered[int(pred_spike_indexes[i]) - (win_size//2) : int(pred_spike_indexes[i]) + (win_size//2)]
+    d_input.append(d_window)
+
+d_input = np.array(d_input).reshape(-1, win_size)
+
+
+second_detect_model = keras.models.load_model("models/spike_detect_second_stage_v" + str(second_detect_version) + ".keras")
+
+print("Second Stage")
+output = second_detect_model.predict(d_input)# [0, :, 0]
+    
+for i in range(0, len(output)):
+    output_window = output[i]
+
+    win_pred_spike = np.nonzero(output_window > 0.6)[0]
+
+    if len(win_pred_spike) > 0:
+        for x in win_pred_spike:
+            precise_spike_sequence[(pred_spike_indexes[i] - (win_size//2)) + x] = 1
+
+    else:
+        precise_spike_sequence[(pred_spike_indexes[i] - (win_size//2)) + np.argmax(output[i])] = 1 
+
+
+precise_pred_indexes = np.nonzero(precise_spike_sequence)[0]
+
+train_start = 0
+
+upper_size = 80
+
+win_size = 200
+input_shape = (win_size, 1)
+
+class_pos_sequence = np.zeros(sequence_len, dtype=np.float64)
+for i in range(0, len(Index[0])):
+    class_pos_sequence[Index[0][i]]= Class[0][i]
+
+d_train = []
+d_label = []
+d_val_train = []
+d_val_label = []
+
+for i in range(0, int(len(precise_pred_indexes) * 0.8)):
+    for x in range(-6, 6):
+        
+        if (precise_pred_indexes[i] + x - (win_size//2)) < 0:
+            d_window = d1_filtered[0 : int(precise_pred_indexes[i] + (win_size//2) + x)]
+            upper_half = class_pos_sequence[int(precise_pred_indexes[i] + x) : int(precise_pred_indexes[i] + (win_size//2) + x)]
+            bottom_half = class_pos_sequence[0: int(precise_pred_indexes[i] + x)]
+            avg = np.mean(d_window)
+            padding_size = int((win_size//2) - len(bottom_half))
+            d_window = np.concatenate([[avg] * padding_size, d_window], axis=0) # * int((win_size//2) - precise_pred_indexes[i])
+            bottom_half = np.concatenate([[0] * padding_size, bottom_half], axis=0) 
+        elif (precise_pred_indexes[i] + x + (win_size//2)) > len(d1_filtered):
+            d_window = d1_filtered[int(precise_pred_indexes[i] - (win_size//2)) : ]
+            upper_half = class_pos_sequence[int(precise_pred_indexe[i] + x) : ]
+            bottom_half = class_pos_sequence[int(precise_pred_indexes[i] - (win_size//2) + x) : int(precise_pred_indexes[i] + x)]
+            avg = np.mean(d_window)
+            padding_size = int((win_size//2) - len(upper_half))
+            d_window = np.concatenate([d_window, [avg] * padding_size ], axis=0)
+            upper_half = np.concatenate([upper_half, [0] * padding_size], axis=0)
         else:
-            train_data.append(d1_filtered[:])
+            d_window = d1_filtered[int(precise_pred_indexes[i] + x - (win_size//2)) : int(precise_pred_indexes[i] + x + (win_size//2))]
+            upper_half = class_pos_sequence[int(precise_pred_indexes[i] + x) : int(precise_pred_indexes[i] + (win_size//2) + x)]
+            bottom_half = class_pos_sequence[int(precise_pred_indexes[i] - (win_size//2) + x) : int(precise_pred_indexes[i] + x)]
 
-        class_options = [0, 0, 0, 0, 0]
-        class_options[Class[0][x] - 1] = 1
-        label_data.append(class_options)
+        d_train.append(d_window)
+        
+        upper_class_index = np.nonzero(upper_half)[0]
+        bottom_class_index = np.nonzero(bottom_half)[0]
+        
+        if (len(upper_class_index) == 0) and (len(bottom_class_index) == 0):
+            label_options = [1, 0, 0, 0, 0, 0]
+            d_label.append(label_options)
+        elif len(upper_class_index) == 0:
+            nearest_class = int(bottom_half[bottom_class_index[0]])
+            label_options = [0, 0, 0, 0, 0, 0]
+            label_options[nearest_class] = 1
+            d_label.append(label_options)
+        elif len(bottom_class_index) == 0:
+            nearest_class = int(upper_half[upper_class_index[0]])
+            label_options = [0, 0, 0, 0, 0, 0]
+            label_options[nearest_class] = 1
+            d_label.append(label_options)
+        elif upper_class_index[0] <= ((win_size//2) - bottom_class_index[0]):
+            nearest_class = int(upper_half[upper_class_index[0]])
+            label_options = [0, 0, 0, 0, 0, 0]
+            label_options[nearest_class] = 1
+            d_label.append(label_options)
+        else:
+            nearest_class = int(bottom_half[bottom_class_index[0]])
+            label_options = [0, 0, 0, 0, 0, 0]
+            label_options[nearest_class] = 1
+            d_label.append(label_options)
+
+for i in range(int(len(precise_pred_indexes) * 0.8), len(precise_pred_indexes)):
+    for x in range(-6, 6):
+        
+        if (precise_pred_indexes[i] - (win_size//2)) < 0:
+            d_window = d1_filtered[0 : int(precise_pred_indexes[i] + (win_size//2) + x)]
+            upper_half = class_pos_sequence[int(precise_pred_indexes[i] + x) : int(precise_pred_indexes[i] + (win_size//2) + x)]
+            bottom_half = class_pos_sequence[0: int(precise_pred_indexes[i] + x)]
+            avg = np.mean(d_window)
+            padding_size = int((win_size//2) - len(bottom_half))
+            d_window = np.concatenate([[avg] * padding_size, d_window], axis=0) # * int((win_size//2) - precise_pred_indexes[i])
+            bottom_half = np.concatenate([[0] * padding_size, bottom_half], axis=0) 
+        elif (precise_pred_indexes[i] + (win_size//2)) > len(d1_filtered):
+            d_window = d1_filtered[int(precise_pred_indexes[i] - (win_size//2)) : ]
+            upper_half = class_pos_sequence[int(precise_pred_indexes[i] + x) : ]
+            bottom_half = class_pos_sequence[int(precise_pred_indexes[i] - (win_size//2) + x) : int(precise_pred_indexes[i] + x)]
+            avg = np.mean(d_window)
+            padding_size = int((win_size//2) - len(upper_half))
+            d_window = np.concatenate([d_window, [avg] * padding_size ], axis=0)
+            upper_half = np.concatenate([upper_half, [0] * padding_size], axis=0)
+        else:
+            d_window = d1_filtered[int(precise_pred_indexes[i] + x - (win_size//2)) : int(precise_pred_indexes[i] + x + (win_size//2))]
+            upper_half = class_pos_sequence[int(precise_pred_indexes[i] + x) : int(precise_pred_indexes[i] + (win_size//2) + x)]
+            bottom_half = class_pos_sequence[int(precise_pred_indexes[i] - (win_size//2) + x) : int(precise_pred_indexes[i] + x)]
+
+        d_val_train.append(d_window)
+        
+        upper_class_index = np.nonzero(upper_half)[0]
+        bottom_class_index = np.nonzero(bottom_half)[0]
+        
+        if (len(upper_class_index) == 0) and (len(bottom_class_index) == 0):
+            label_options = [1, 0, 0, 0, 0, 0]
+            d_val_label.append(label_options)
+        elif len(upper_class_index) == 0:
+            nearest_class = int(bottom_half[bottom_class_index[0]])
+            label_options = [0, 0, 0, 0, 0, 0]
+            label_options[nearest_class] = 1
+            d_val_label.append(label_options)
+        elif len(bottom_class_index) == 0:
+            nearest_class = int(upper_half[upper_class_index[0]])
+            label_options = [0, 0, 0, 0, 0, 0]
+            label_options[nearest_class] = 1
+            d_val_label.append(label_options)
+        elif upper_class_index[0] <= ((win_size//2) - bottom_class_index[0]):
+            nearest_class = int(upper_half[upper_class_index[0]])
+            label_options = [0, 0, 0, 0, 0, 0]
+            label_options[nearest_class] = 1
+            d_val_label.append(label_options)
+        else:
+            nearest_class = int(bottom_half[bottom_class_index[0]])
+            label_options = [0, 0, 0, 0, 0, 0]
+            label_options[nearest_class] = 1
+            d_val_label.append(label_options)
 
 
+d_train = np.array(d_train).reshape(-1, win_size)
+d_label = np.array(d_label).reshape(-1, 6)
+d_val_train = np.array(d_val_train).reshape(-1, win_size)
+d_val_label = np.array(d_val_label).reshape(-1, 6)
 
-val_class_train = np.array(train_data[int(num_of_spikes * 0.8):]).reshape(-1, win_size) 
-val_class_label = np.array(label_data[int(num_of_spikes * 0.8):])
-
-class_train = np.array(train_data[:int(num_of_spikes * 0.8)]).reshape(-1, win_size)
-class_label = np.array(label_data[:int(num_of_spikes * 0.8)])
 
 model = models.Sequential()
 model.add(layers.Input(shape=input_shape))
 model.add(layers.Normalization(axis=None))
 model.add(layers.MaxPooling1D(4))
 model.add(layers.Conv1D(20, 3, padding="same", activation="sigmoid"))
-model.add(layers.Conv1D(50, 6, padding="same", activation="sigmoid"))
-model.add(layers.Conv1D(150, 12, padding="same", activation="sigmoid"))
+model.add(layers.Conv1D(50, 3, padding="same", activation="sigmoid"))
+model.add(layers.Conv1D(150, 3, padding="same", activation="sigmoid"))
+# model.add(layers.Conv1D(256, 3, padding="same", activation="sigmoid"))
 model.add(layers.Flatten())
 model.add(layers.Dense(80, activation="sigmoid"))
 model.add(layers.Dense(30, activation="sigmoid"))
-model.add(layers.Dense(5, activation="sigmoid"))
+model.add(layers.Dense(6, activation="sigmoid"))
 model.summary()
 
 model.compile(optimizer='adamW', loss=losses.CategoricalCrossentropy(), metrics=["accuracy"])
 
-history = model.fit(class_train, class_label, epochs=120, batch_size=16, validation_data=(val_class_train, val_class_label)) 
+print("Training Classifier")
+history = model.fit(d_train, d_label, epochs=60, batch_size=18, validation_data=(d_val_train, d_val_label)) 
 
 model.save("models/spike_classification_v" + str(model_version) + ".keras")
