@@ -8,8 +8,8 @@ from scipy.ndimage import gaussian_filter1d
 from detectionEvaluationFunction import indexDelta50Verification
 
 
-detector_version = 20
-classifier_version = 15
+detector_version = 32
+classifier_version = 23
 
 mat = spio.loadmat("Coursework-Datasets-20251028/D1.mat")
 d = mat["d"]

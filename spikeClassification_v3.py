@@ -9,7 +9,6 @@ from scipy.ndimage import gaussian_filter1d
 
 model_version = 23
 detector_version = 32
-second_detect_version = 5
 
 mat = spio.loadmat("Coursework-Datasets-20251028/D1.mat")
 d = mat["d"]

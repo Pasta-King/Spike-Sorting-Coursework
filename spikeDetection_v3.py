@@ -1,0 +1,133 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import scipy.io as spio
+import tensorflow as tf
+from keras import datasets, layers, models, backend, losses
+from scipy.signal import butter, filtfilt
+from scipy.ndimage import gaussian_filter1d
+
+model_version = 32
+
+mat = spio.loadmat("Coursework-Datasets-20251028/D1.mat")
+d = mat["d"]
+Index = mat["Index"]
+Class = mat["Class"]
+
+filtered_mat = spio.loadmat("Filtered_Datasets/D1_Noisy_filtered.mat")
+d1_filtered = filtered_mat["re_wave1"]
+d1_filtered = d1_filtered[:, 0]
+
+sequence_len = len(d[0])
+
+# Adding Noise
+# d1_x = np.linspace(0, sequence_len, sequence_len, dtype=int)
+# noise = np.random.normal(0, 2, [sequence_len]) 
+# noise_wave = 3 * np.sin(2*np.pi*0.00000286*d1_x + 4) #0.00001
+# d1_noisy = d[0] # * 2 + noise + noise_wave - 5
+
+# Filtering
+# def butter_highpass_filter(signal, threshold, freq, order=5):
+#     normal_threshold = threshold / (0.5 * freq)
+#     b, a = butter(order, normal_threshold, btype="high", analog=False)
+#     return filtfilt(b, a, signal)
+
+# d1_filtered = gaussian_filter1d(d1_noisy, 5)
+# d1_filtered = butter_highpass_filter(d1_filtered, 5, 25e3)
+
+
+# d_zeroes = [[0, 1]] * sequence_len
+# for i in range(0, len(Index[0])):
+#     d_zeroes[Index[0][i]] = [1, 0] # Class[0][i]
+
+d_zeroes = np.zeros(sequence_len, dtype=np.float64)
+for i in range(0, len(Index[0])):
+    d_zeroes[Index[0][i] - 4: Index[0][i] + 5] = [0.7, 0.75, 0.8, 0.85, 1, 0.85, 0.8, 0.75, 0.7] # Class[0][i]
+    # d_zeroes[Index[0][i]] = 1
+    # print(d_zeroes[Index[0][i] - 4: Index[0][i] + 6])
+
+# print(d_zeroes)
+
+# Output (200, 1) df
+# 0 where there isn't a spike and 1 where there is
+
+train_start = 0
+train_end = int(sequence_len * 0.8)
+
+win_size = 50
+input_shape = (win_size, 1)
+win_step = 30
+
+d_train = []
+d_label = []
+d_val_train = []
+d_val_label = []
+
+for i in range(train_start, train_end, win_step):
+    d_window = d1_filtered[i:i + win_size]
+    # noise = np.random.normal(0, 1, [win_size]) 
+    d_train.append(d_window)
+    d_label.append(d_zeroes[i:i + win_size])
+
+for i in range(train_end, sequence_len - win_size, win_step):
+    d_window = d1_filtered[i:i + win_size]
+    # noise = np.random.normal(0, 4, [win_size]) 
+    d_val_train.append(d_window)
+    d_val_label.append(d_zeroes[i:i + win_size])
+
+d_train = np.array(d_train).reshape(-1, win_size)
+print(d_train)
+d_label = np.array(d_label) #.reshape(-1, 200)
+d_val_train = np.array(d_val_train).reshape(-1, win_size)
+d_val_label = np.array(d_val_label) #.reshape(-1, 200)
+
+
+input_shape = (50,1)
+input_shape = (50,1)
+model = models.Sequential()
+model.add(layers.Input(shape=input_shape))
+model.add(layers.Normalization(axis=None))
+model.add(layers.Conv1D(34, 3, padding="same", activation="sigmoid")) 
+model.add(layers.Conv1D(64, 3, padding="same", activation="sigmoid"))
+model.add(layers.Conv1D(120, 3, padding="same", activation="sigmoid"))
+model.add(layers.Conv1D(256, 3, padding="same", activation="sigmoid"))
+model.add(layers.Dense(800, activation="sigmoid"))
+model.add(layers.Dense(600, activation="sigmoid"))
+model.add(layers.Dense(1, activation="sigmoid"))
+model.summary()
+
+# def custom_loss(y_true, y_pred):d
+#     loss = float(0)
+
+#     spike_indexes = np.nonzero(y_true)[0] # np.nonzero creates a tuple of arrays so first element is selected
+    
+
+#     if not spike_indexes:
+#         loss += backend.log(1 - y_pred)
+#     else:
+#         midpoints = [0]
+#         for i in range(1, len(spike_indexes)):
+#             midpoints.append((spike_indexes[i-1] + spike_indexes[i]) // 2)
+#         midpoints.append(len(y_true))
+
+
+    # spike_present = 0
+    # for i in range(0, len(y_true)):
+    #     if y_true[i] == 1:
+    #         spike_present = 1
+    #         loss = 0
+
+# if there is a spike, loss = sum (prob at index * distance to true spike index) - prob at true spike indexmnjh
+# if there is no spike, loss = sum (prob at index * mean distance) 
+
+model.compile(optimizer='adamW', loss=losses.BinaryCrossentropy(), metrics=["accuracy"])
+
+history = model.fit(d_train, d_label, epochs=30, batch_size=16, validation_data=(d_val_train, d_val_label)) 
+
+model.save("models/spike_detection_v" + str(model_version) + ".keras")
+
+# output = model.predict(d_train)
+# spikes = np.flatnonzero(output > 0.25)
+# print(spikes)
+# print("Predicted Spikes", len(spikes))
+# print(np.sort(Index)[0])
+# print("Real Spikes", len(np.sort(Index)[0]))

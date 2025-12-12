@@ -7,7 +7,7 @@ from keras import datasets, layers, models, backend, losses
 from scipy.signal import butter, filtfilt
 from scipy.ndimage import gaussian_filter1d
 
-model_version = 22
+model_version = 23
 
 mat = spio.loadmat("Coursework-Datasets-20251028/D1.mat")
 d = mat["d"]
@@ -39,7 +39,7 @@ train_end = int(sequence_len * 0.8)
 
 win_size = 100
 input_shape = (win_size, 1)
-win_step = 160
+win_step = 80
 
 d_input = []
 for i in range(train_start, sequence_len - win_size, win_step):
